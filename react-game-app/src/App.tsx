@@ -11,12 +11,11 @@ import ExpenseForm from "./components/ExpenseForm";
 import Expense from "./models/expense";
 import ExpenseTracker from "./components/ExpenseTracker";
 import ProductList from "./components/ProductList";
-import axios from "axios";
+import { AxiosError } from "axios";
+import { CanceledError } from "./services/api-client";
+import userService, { User } from "./services/user-service";
+import useUsers from "./hooks/useUsers";
 
-interface User {
-  id: number;
-  name: string;
-}
 export default function App() {
   let items = ["New York", "Montreal", "Toronto", "Tokyo", "Seoul"];
   const [isAlert, setIsAlert] = useState(false);
@@ -29,7 +28,6 @@ export default function App() {
     firstName: "",
     lastName: "",
   });
-  const [isLoadings, setLoading] = useState(false);
 
   const handleSelectItem = (item: string) => {
     console.log(item);
@@ -85,7 +83,7 @@ export default function App() {
   });
 
   const connect = () => console.log("Connecting");
-  const disconnect = () => console.log("DisConnecting");
+  const disconnect = () => console.log("Disconnecting");
 
   useEffect(() => {
     connect();
@@ -96,19 +94,73 @@ export default function App() {
 
   const [category, setCategory] = useState("");
 
-  const [users, setUsers] = useState<User[]>([]);
+  const { users, error, isLoading, setUsers, setError } = useUsers();
+  const deleteUser = (user: User) => {
+    const originalUsers = [...users];
+    setUsers(users.filter((u) => u.id !== user.id));
 
-  useEffect(() => {
-    axios
-      .get<User[]>("https://jsonplaceholder.typicode.com/users")
-      .then((response) => setUsers(response.data));
-  }, []);
+    userService.delete<User>(user.id).catch((error) => {
+      setError(error.message);
+      setUsers(originalUsers);
+    });
+  };
+
+  const addUser = () => {
+    const originalUsers = [...users];
+    const newUser = { id: 0, name: "Sam" };
+    setUsers([...users, newUser]);
+
+    userService
+      .create(newUser)
+      .then(({ data: savedUser }) => setUsers([savedUser, ...users]))
+      .catch((e) => {
+        setError(e.message);
+        setUsers(originalUsers);
+      });
+  };
+
+  const updateUser = (user: User) => {
+    const originalUsers = [...users];
+    const updatedUser = { ...user, name: user.name + "!" };
+
+    setUsers(users.map((u) => (u.id === user.id ? updatedUser : u)));
+
+    //patch is for updating properties of object put is to replace whole object... not every back end is like this tho
+    userService.update<User>(updatedUser).catch((err) => {
+      setError(err.message);
+      setUsers(originalUsers);
+    });
+  };
 
   return (
     <div>
-      <ul>
+      {error && <p className="text-danger">{error}</p>}
+      {isLoading && <div className="spinner-border"></div>}
+      <button className="btn btn-primary mb-3" onClick={addUser}>
+        Add
+      </button>
+      <ul className="list-group">
         {users.map((user) => (
-          <li key={user.id}>{user.name}</li>
+          <li
+            key={user.id}
+            className="list-group-item d-flex justify-content-between"
+          >
+            {user.name}
+            <div className="">
+              <button
+                className="btn btn-outline-secondary mx-2"
+                onClick={() => updateUser(user)}
+              >
+                Update
+              </button>
+              <button
+                className="btn btn-outline-danger"
+                onClick={() => deleteUser(user)}
+              >
+                Delete
+              </button>
+            </div>
+          </li>
         ))}
       </ul>
       <select
